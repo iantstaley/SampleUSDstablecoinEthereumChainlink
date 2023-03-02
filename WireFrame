@@ -1,0 +1,65 @@
+echo "# SampleUSDstablecoinEthereumChainlink" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/iantstaley/SampleUSDstablecoinEthereumChainlink.git
+git push -u origin main
+// Import required libraries and contracts
+pragma solidity ^0.8.0;
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+// Define the US Dollar stablecoin contract
+contract USDStablecoin {
+    string public name = "US Dollar Stablecoin";
+    string public symbol = "USD";
+    uint8 public decimals = 18;
+    uint256 public totalSupply;
+    mapping(address => uint256) public balanceOf;
+    
+    // Define the Chainlink Oracle address and interface
+    AggregatorV3Interface internal priceFeed;
+    address private oracle;
+    uint256 private oracleFee;
+
+    // Set the initial USD price and oracle address
+    constructor() {
+        priceFeed = AggregatorV3Interface(0x8A753747A1Fa494EC906cE90E9f37563A8AF630e);
+        oracle = 0xc57B33452b4F7BB189bB5AfaE9cc4aBa1f7a4FD8;
+        oracleFee = 0.1 ether;
+    }
+
+    // Function to update the stablecoin price based on the USD price
+    function updatePrice() public payable {
+        require(msg.value >= oracleFee, "Not enough Ether to pay oracle fee.");
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        uint256 usdPrice = uint256(price) * 10 ** (decimals - priceFeed.decimals());
+        uint256 usdToStablecoin = usdPrice * totalSupply / 10 ** decimals;
+        uint256 stablecoinToUsd = 10 ** decimals * totalSupply / usdPrice;
+        if (usdToStablecoin > totalSupply) {
+            uint256 newSupply = usdToStablecoin - totalSupply;
+            balanceOf[msg.sender] += newSupply;
+            totalSupply += newSupply;
+        } else if (stablecoinToUsd > totalSupply) {
+            uint256 excessSupply = stablecoinToUsd - totalSupply;
+            balanceOf[msg.sender] -= excessSupply;
+            totalSupply -= excessSupply;
+        }
+    }
+
+    // Function to allow users to buy the stablecoin
+    function buyStablecoin(uint256 amount) public payable {
+        require(msg.value >= amount, "Not enough Ether sent to buy stablecoin.");
+        uint256 price = totalSupply == 0 ? 1 ether : totalSupply * 10 ** decimals / balanceOf[address(this)];
+        balanceOf[msg.sender] += amount * 10 ** decimals / price;
+        balanceOf[address(this)] -= amount * 10 ** decimals / price;
+    }
+
+    // Function to allow users to sell the stablecoin
+    function sellStablecoin(uint256 amount) public {
+        uint256 price = totalSupply == 0 ? 1 ether : totalSupply * 10 ** decimals / balanceOf[address(this)];
+        balanceOf[msg.sender] -= amount;
+        balanceOf[address(this)] += amount;
+        payable(msg.sender).transfer(amount * price / 10 ** decimals);
+    }
+}
